@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 320px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 15px; background-color: #f9f9f9; }
+    h3 { margin-top: 0; color: #333; font-size: 16px; margin-bottom: 15px;}
+    
+    /* Input Area */
+    .input-group { display: flex; gap: 5px; margin-bottom: 15px; }
+    input { flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; outline: none; }
+    input:focus { border-color: #007bff; }
+    #addBtn { padding: 8px 15px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; }
+    #addBtn:hover { background: #0056b3; }
+
+    /* List Area */
+    ul { list-style-type: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
+    li { background: white; border: 1px solid #eee; margin-bottom: 5px; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    
+    .selector-text { font-family: monospace; font-size: 13px; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+    .controls { display: flex; align-items: center; gap: 10px; }
+
+    /* Toggle Switch */
+    .switch { position: relative; display: inline-block; width: 34px; height: 20px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: #28a745; }
+    input:checked + .slider:before { transform: translateX(14px); }
+
+    /* Delete Button */
+    .delete-btn { background: none; border: none; color: #999; cursor: pointer; font-size: 16px; padding: 0; display: flex; align-items: center; }
+    .delete-btn:hover { color: #dc3545; }
+  </style>
+</head>
+<body>
+  <h3>Blur Manager</h3>
+
+  <div class="settings-group">
+    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+      <label for="intensitySlider" style="font-size:13px; color:#555;">Blur Intensity</label>
+      <span id="intensityValue" style="font-size:13px; font-weight:bold; color:#333;">15px</span>
+    </div>
+    <input type="range" id="intensitySlider" min="0" max="100" value="15" style="width:100%">
+  </div>
+  
+  <div class="input-group">
+    <input type="text" id="selectorInput" placeholder="Enter selector (e.g. .ad-banner)">
+    <button id="addBtn">Add</button>
+  </div>
+
+  <ul id="list"></ul>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
