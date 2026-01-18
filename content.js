@@ -17,7 +17,11 @@ function updateBlur(selectors, intensity) {
     return;
   }
 
-  const cssRules = activeSelectors.join(", ") + ` { filter: blur(${intensity}px) !important; transition: filter 0.3s ease; }`;
+  const cssRules = activeSelectors.join(", ") + ` { 
+    filter: blur(${intensity}px) !important; 
+    transition: filter 0.3s ease; 
+    clip-path: inset(0) !important; 
+  }`;
   style.textContent = cssRules;
 }
 

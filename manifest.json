@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Blur Extension",
-  "version": "1.2",
+  "version": "1.3",
   "description": "Automatically blurs elements based on CSS selectors.",
   "permissions": [
     "storage",
