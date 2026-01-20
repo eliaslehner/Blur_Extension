@@ -2,163 +2,230 @@ document.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("selectorInput");
   const addBtn = document.getElementById("addBtn");
   const list = document.getElementById("list");
-  const intensitySlider = document.getElementById("intensitySlider");
-  const intensityValue = document.getElementById("intensityValue");
+  
+  const excInput = document.getElementById("exclusionInput");
+  const addExcBtn = document.getElementById("addExcBtn");
+  const excList = document.getElementById("excList");
+
+  const modeRadios = document.getElementsByName("blurMode");
+  const videoModeRadios = document.getElementsByName("videoMode");
 
   // Load and display saved settings
   loadSettings();
 
-  // Slider events
-  intensitySlider.addEventListener("input", (e) => {
-    const val = e.target.value;
-    intensityValue.textContent = val + "px";
-    // Send preview message to active tab
-    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, { type: "PREVIEW_INTENSITY", value: val });
+  // Mode Radio Change
+  modeRadios.forEach(radio => {
+    radio.addEventListener("change", (e) => {
+      if(e.target.checked) {
+        chrome.storage.local.set({ blurMode: e.target.value });
       }
     });
   });
-  
-  intensitySlider.addEventListener("change", () => {
-    // Save when user releases slider
-    updateStorage(); 
-  });
 
-  // Add new selector on Click or Enter key
-  addBtn.addEventListener("click", handleAdd);
-  input.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") handleAdd();
-  });
-
-  function handleAdd() {
-    const selectorText = input.value.trim();
-    if (!selectorText) return;
-
-    // Use storage.local instead of sync for better reliability during testing
-    chrome.storage.local.get(["selectors"], (result) => {
-      if (chrome.runtime.lastError) {
-        console.error("Error reading storage:", chrome.runtime.lastError);
-        return;
+  // Video Mode Radio Change
+  videoModeRadios.forEach(radio => {
+    radio.addEventListener("change", (e) => {
+      if(e.target.checked) {
+        chrome.storage.local.set({ videoMode: e.target.value });
       }
-      
-      let selectors = result.selectors || [];
-      
+    });
+  });
+
+  // Add Selector
+  addBtn.addEventListener("click", () => handleAdd(input, "selectors"));
+  input.addEventListener("keypress", (e) => { if (e.key === "Enter") handleAdd(input, "selectors"); });
+
+  // Add Exclusion
+  addExcBtn.addEventListener("click", () => handleAdd(excInput, "exclusions"));
+  excInput.addEventListener("keypress", (e) => { if (e.key === "Enter") handleAdd(excInput, "exclusions"); });
+
+  function handleAdd(inputElement, storageKey) {
+    const text = inputElement.value.trim();
+    if (!text) return;
+
+    chrome.storage.local.get([storageKey], (result) => {
+      let items = result[storageKey] || [];
       // Prevent duplicates
-      if (!selectors.some(s => s.name === selectorText)) {
-        // Add new selector as active by default
-        selectors.push({ name: selectorText, active: true });
-        updateStorage(selectors);
-        input.value = "";
+      if (!items.some(s => s.name === text)) {
+        // For selectors, add default intensity of 15; for exclusions, just active state
+        if (storageKey === "selectors") {
+          items.push({ name: text, active: true, intensity: 15 });
+        } else {
+          items.push({ name: text, active: true });
+        }
+        // Save just this key
+        const data = {};
+        data[storageKey] = items;
+        
+        chrome.storage.local.set(data, () => {
+             loadSettings();
+             // Reload/Notify is handled by storage listener in content.js
+        });
+        inputElement.value = "";
       }
     });
   }
 
   function loadSettings() {
-    list.innerHTML = ""; // Clear current list
-    chrome.storage.local.get(["selectors", "blurIntensity"], (result) => {
-      if (chrome.runtime.lastError) {
-        console.error("Error reading storage:", chrome.runtime.lastError);
-        list.innerHTML = "<li style='color:red;'>Error loading data.</li>";
-        return;
-      }
+    list.innerHTML = ""; 
+    excList.innerHTML = "";
 
-      // Load Slider
-      const intensity = result.blurIntensity !== undefined ? result.blurIntensity : 15;
-      intensitySlider.value = intensity;
-      intensityValue.textContent = intensity + "px";
+    chrome.storage.local.get(["selectors", "exclusions", "blurMode", "videoMode"], (result) => {
+      if (chrome.runtime.lastError) return;
 
-      // Load List
+      // Blur Mode
+      const mode = result.blurMode || "gpu";
+      const radio = document.querySelector(`input[name="blurMode"][value="${mode}"]`);
+      if (radio) radio.checked = true;
+
+      // Video Mode
+      const vMode = result.videoMode || "normal";
+      const vRadio = document.querySelector(`input[name="videoMode"][value="${vMode}"]`);
+      if (vRadio) vRadio.checked = true;
+
+      // Selectors List
       const selectors = result.selectors || [];
-      if(selectors.length === 0) {
-        list.innerHTML = "<li style='justify-content:center; color:#999;'>No selectors added yet.</li>";
-        return;
-      }
-      selectors.forEach((item, index) => renderItem(item, index, selectors));
+      if(selectors.length === 0) list.innerHTML = "<li style='justify-content:center; color:#999;'>No selectors added.</li>";
+      else selectors.forEach((item, index) => renderItem(item, index, selectors, list, "selectors"));
+
+      // Exclusions List
+      const exclusions = result.exclusions || [];
+      if(exclusions.length === 0) excList.innerHTML = "<li style='justify-content:center; color:#999;'>No exclusions added.</li>";
+      else exclusions.forEach((item, index) => renderItem(item, index, exclusions, excList, "exclusions"));
     });
   }
 
-  function renderItem(item, index, allSelectors) {
+  function renderItem(item, index, array, parentList, storageKey) {
     const li = document.createElement("li");
 
-    // Left side: Text
-    const textSpan = document.createElement("span");
-    textSpan.className = "selector-text";
-    textSpan.textContent = item.name;
-    // Visually grey out text if inactive
-    if (!item.active) textSpan.style.color = "#ccc";
-
-    // Right side: Controls (Toggle + Delete)
-    const controlsDiv = document.createElement("div");
-    controlsDiv.className = "controls";
-
-    // 1. Toggle Switch
-    const label = document.createElement("label");
-    label.className = "switch";
-    
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = item.active;
-    checkbox.onchange = () => toggleSelector(index, allSelectors);
-
-    const slider = document.createElement("span");
-    slider.className = "slider";
-
-    label.appendChild(checkbox);
-    label.appendChild(slider);
-
-    // 2. Delete Button
-    const delBtn = document.createElement("button");
-    delBtn.className = "delete-btn";
-    // Use an SVG icon instead of text to avoid encoding/font issues
-    delBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-    delBtn.title = "Delete permanently";
-    delBtn.onclick = () => deleteSelector(index, allSelectors);
-
-    controlsDiv.appendChild(label);
-    controlsDiv.appendChild(delBtn);
-
-    li.appendChild(textSpan);
-    li.appendChild(controlsDiv);
-    list.appendChild(li);
-  }
-
-  function toggleSelector(index, selectors) {
-    // Flip the active state
-    selectors[index].active = !selectors[index].active;
-    updateStorage(selectors);
-  }
-
-  function deleteSelector(index, selectors) {
-    // Remove item from array
-    selectors.splice(index, 1);
-    updateStorage(selectors);
-  }
-
-  // If selectors is passed, save it. 
-  // If not, fetch current selectors from storage so we don't overwrite them with empty.
-  // Always save current slider value.
-  function updateStorage(currentSelectors = null) {
-    const intensity = parseInt(intensitySlider.value, 10);
-    
-    if (currentSelectors) {
-      save(currentSelectors, intensity);
-    } else {
-      chrome.storage.local.get(["selectors"], (result) => {
-        save(result.selectors || [], intensity);
-      });
-    }
-  }
-
-  function save(selectors, intensity) {
-    chrome.storage.local.set({ selectors, blurIntensity: intensity }, () => {
-      if (chrome.runtime.lastError) {
-        console.error("Error saving storage:", chrome.runtime.lastError);
-        return;
-      }
+    // For selectors, use a different layout with intensity slider
+    if (storageKey === "selectors") {
+      li.style.flexDirection = "column";
+      li.style.alignItems = "stretch";
       
-      loadSettings(); // Re-render UI
-      // No reload needed; content.js listens for storage changes
-    });
+      // Top row: selector name and controls
+      const topRow = document.createElement("div");
+      topRow.className = "selector-row";
+      
+      const textSpan = document.createElement("span");
+      textSpan.className = "selector-text";
+      textSpan.textContent = item.name;
+      if (!item.active) textSpan.style.color = "#ccc";
+
+      const controlsDiv = document.createElement("div");
+      controlsDiv.className = "controls";
+
+      // Toggle
+      const label = document.createElement("label");
+      label.className = "switch";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = item.active;
+      checkbox.onchange = () => {
+        array[index].active = !array[index].active;
+        saveArray(storageKey, array);
+      };
+      const slider = document.createElement("span");
+      slider.className = "slider";
+      label.appendChild(checkbox);
+      label.appendChild(slider);
+
+      // Delete
+      const delBtn = document.createElement("button");
+      delBtn.className = "delete-btn";
+      delBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+      delBtn.onclick = () => {
+        array.splice(index, 1);
+        saveArray(storageKey, array);
+      };
+
+      controlsDiv.appendChild(label);
+      controlsDiv.appendChild(delBtn);
+      topRow.appendChild(textSpan);
+      topRow.appendChild(controlsDiv);
+      
+      // Bottom row: intensity slider
+      const intensityRow = document.createElement("div");
+      intensityRow.className = "intensity-row";
+      intensityRow.style.opacity = item.active ? "1" : "0.5";
+      
+      const intensitySlider = document.createElement("input");
+      intensitySlider.type = "range";
+      intensitySlider.min = "0";
+      intensitySlider.max = "100";
+      intensitySlider.value = item.intensity !== undefined ? item.intensity : 15;
+      intensitySlider.style.accentColor = "#007bff";
+      
+      const intensityLabel = document.createElement("span");
+      intensityLabel.className = "intensity-label";
+      intensityLabel.textContent = intensitySlider.value + "px";
+      
+      intensitySlider.oninput = (e) => {
+        intensityLabel.textContent = e.target.value + "px";
+        // Live preview - update storage immediately for real-time effect
+        const newIntensity = parseInt(e.target.value, 10);
+        chrome.storage.local.get(["selectors"], (result) => {
+          const selectors = result.selectors || [];
+          if (selectors[index]) {
+            selectors[index].intensity = newIntensity;
+            chrome.storage.local.set({ selectors: selectors });
+          }
+        });
+      };
+      
+      // Note: intensity is saved in oninput for real-time updates
+      
+      intensityRow.appendChild(intensitySlider);
+      intensityRow.appendChild(intensityLabel);
+      
+      li.appendChild(topRow);
+      li.appendChild(intensityRow);
+    } else {
+      // Exclusions - keep original layout
+      const textSpan = document.createElement("span");
+      textSpan.className = "selector-text";
+      textSpan.textContent = item.name;
+      if (!item.active) textSpan.style.color = "#ccc";
+
+      const controlsDiv = document.createElement("div");
+      controlsDiv.className = "controls";
+
+      // Toggle
+      const label = document.createElement("label");
+      label.className = "switch";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = item.active;
+      checkbox.onchange = () => {
+        array[index].active = !array[index].active;
+        saveArray(storageKey, array);
+      };
+      const slider = document.createElement("span");
+      slider.className = "slider";
+      label.appendChild(checkbox);
+      label.appendChild(slider);
+
+      // Delete
+      const delBtn = document.createElement("button");
+      delBtn.className = "delete-btn";
+      delBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+      delBtn.onclick = () => {
+        array.splice(index, 1);
+        saveArray(storageKey, array);
+      };
+
+      controlsDiv.appendChild(label);
+      controlsDiv.appendChild(delBtn);
+      li.appendChild(textSpan);
+      li.appendChild(controlsDiv);
+    }
+    
+    parentList.appendChild(li);
+  }
+
+  function saveArray(key, array) {
+    const data = {};
+    data[key] = array;
+    chrome.storage.local.set(data, () => loadSettings());
   }
 });
